@@ -1,0 +1,136 @@
+xinya_modular_v1/
+├─ app.py                          # 主入口（很薄）：切换“Commander / Admin”，调用对应UI模块
+├─ start_app.bat                   # 一键启动（自动创建/激活venv并安装依赖）
+├─ requirements.txt                # 依赖（已含 Pillow、openpyxl、reportlab 等）
+├─ .env.example                    # 环境变量示例（ADMIN_PASS、EMAIL_*）
+├─ data/
+│   └─ products.json               # 商品数据（JSON）
+├─ assets/
+│   └─ products/                   # 商品图片统一存放目录（已标准化为 800×600 JPG）
+├─ orders/                         # 每个订单的子目录（order.json + PDF + 自定义图片）
+├─ utils/
+│   ├─ image_utils.py              # 【工具】图片规范化（等比缩放+画布居中+压缩）
+│   ├─ email_utils.py              # 【转发封装】调用 _email_impl.send_email_with_attachment
+│   ├─ _email_impl.py              # 【占位可换】SMTP 发送实现（如已有自己版本可替换）
+│   └─ pdf_utils.py                # 【占位可换】PDF 生成（如你已有更强版本可替换）
+└─ xinya_app/
+    ├─ __init__.py
+    ├─ config.py                   # 读取 .env、邮箱/管理员配置、邮箱校验正则、email_config_ok()
+    ├─ paths.py                    # 工程路径、固定目录、ensure_dir()
+    ├─ ids.py                      # ts_now()、gen_order_id()、make_unique_pid()、重复ID自修复
+    ├─ repo_products.py            # 商品仓库：load_products()/save_products()（含缓存）
+    ├─ repo_orders.py              # 订单保存（留接口以后扩展数据库）
+    ├─ services_email.py           # 发送邮件服务（薄封装 utils.email_utils）
+    ├─ services_pdf.py             # PDF 服务（薄封装 utils.pdf_utils）
+    ├─ services_import.py          # 批量导入服务（CSV/Excel + ZIP，并做图片规范化）
+    ├─ ui_client.py                # 【客户页】商品选择、自定义上传、下单、发邮件、PDF下载
+    └─ ui_admin.py                 # 【后台页】添加/修改/删除/导入商品，查看与导出订单
+
+
+各模块职责与“以后改哪里”的指南
+顶层
+
+app.py
+超薄入口：渲染侧边页签、做一次重复商品ID自修复、邮箱配置提醒，然后：
+
+Commander → 调 xinya_app.ui_client.render_client_page()
+
+Admin → 调 xinya_app.ui_admin.render_admin_page()
+
+配置 / 路径 / ID
+
+xinya_app/config.py
+
+读取 .env（ADMIN_EMAIL、ADMIN_PASS、EMAIL_HOST/PORT/USER/PASS 等）
+
+EMAIL_RE 邮箱正则
+
+email_config_ok() 判断邮箱是否可用
+
+以后要改管理员密码/邮箱服务 → 改 .env 或这里。
+
+xinya_app/paths.py
+
+BASE_DIR / DATA_DIR / ASSETS_DIR / PRODUCTS_DIR / ORDERS_DIR / PRODUCTS_JSON
+
+ensure_dir(p)
+
+以后要改保存位置/目录结构 → 改这里。
+
+xinya_app/ids.py
+
+ts_now()、gen_order_id(name)
+
+make_unique_pid(existing) 生成全局唯一商品ID
+
+fix_duplicate_product_ids_file() 启动时自动修复 products.json 内的重复ID
+
+以后要改 ID 规则或自动修复策略 → 改这里。
+
+数据仓库（Repository）
+
+xinya_app/repo_products.py
+
+load_products()（带 Streamlit 缓存）
+
+save_products()（保存并清缓存）
+
+以后要接数据库/改存储结构 → 先改这里。
+
+xinya_app/repo_orders.py
+
+save_order(folder, data)（目前写入 JSON；留口子以后接数据库）
+
+以后订单要进数据库 → 改这里最合适。
+
+服务（Services）
+
+utils/image_utils.py
+
+normalize_image_bytes(...)：统一图片尺寸（默认 800×600）、等比缩放、居中铺底、JPEG 压缩。
+
+想改前端卡片大小 / PDF 图尺寸 / 压缩质量 → 改这里的参数。
+
+xinya_app/services_import.py
+
+批量导入：读 CSV/Excel + ZIP，统一图片 → .jpg。
+
+想放宽/变更列名映射、校验逻辑、导入规则 → 改这里。
+
+xinya_app/services_email.py
+
+发送邮件（薄封装 utils.email_utils.send_email_with_attachment）。
+
+以后切换到 SendGrid/QQ 邮箱 → 改 utils/_email_impl.py 或替换为你已有的 utils/email_utils.py。
+
+xinya_app/services_pdf.py
+
+生成 PDF（薄封装 utils.pdf_utils.build_order_pdf）。
+
+要改版式/分页/字体 → 改 utils/pdf_utils.py；若仅换函数名 → 改这里。
+
+UI 页面
+
+xinya_app/ui_client.py
+
+客户下单页面：
+
+商品三列卡片、单位/箱数量双输入、备注
+
+自定义上传（图片/备注 + 单位/箱数量），三列网格；删除/新增卡片
+
+一键提交：生成订单ID、规范化图片保存、生成PDF、发邮件、下载PDF
+
+想改前端文案、布局、交互细节 → 改这里。
+
+xinya_app/ui_admin.py
+
+后台管理：
+
+新增/修改/删除商品（全部对图片做统一处理）
+
+批量导入（CSV/Excel + ZIP，图片统一处理）
+
+订单列表 / 导出 / 修改状态 / 下载PDF
+
+想加商品分组排序、更多筛选、价格批量更新 → 改这里。

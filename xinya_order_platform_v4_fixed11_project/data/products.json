@@ -1,0 +1,34 @@
+[
+  {
+    "id": "p20250819132311_025658_72f0",
+    "name": "Roasted Tofu",
+    "department": "Épicerie",
+    "unit_price": 6.99,
+    "units_per_case": 30,
+    "image": "assets/products/Roasted_Tofu_20250819132311.jpg"
+  },
+  {
+    "id": "p20250819132311_043610_7cc6",
+    "name": "Nouilles Daoxiao",
+    "department": "Épicerie",
+    "unit_price": 4.99,
+    "units_per_case": 24,
+    "image": "assets/products/Nouilles_Daoxiao_20250819132311.jpg"
+  },
+  {
+    "id": "p20250819132311_060596_454a",
+    "name": "Vermicelles Longkou",
+    "department": "Épicerie",
+    "unit_price": 6.99,
+    "units_per_case": 30,
+    "image": "assets/products/Vermicelles_Longkou_20250819132311.jpg"
+  },
+  {
+    "id": "p20250819132311_074535_bc02",
+    "name": "Sauce Sucre rouleaux",
+    "department": "Épicerie",
+    "unit_price": 4.99,
+    "units_per_case": 20,
+    "image": "assets/products/Sauce_Sucre_rouleaux_20250819132311.jpg"
+  }
+]
