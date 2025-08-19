@@ -9,7 +9,12 @@ from .paths import BASE_DIR, PRODUCTS_DIR, ORDERS_DIR, ensure_dir
 from .repo_products import load_products, save_products
 from .ids import ts_now, make_unique_pid
 from utils.image_utils import normalize_image_bytes
-from utils.pdf_utils import build_order_pdf
+# 原来：
+# from utils.pdf_utils import build_order_pdf
+
+# 改为：
+from utils.pdf_utils import build_order_pdf_table
+
 
 def render_admin_page():
     pwd = st.text_input("Mot de passe admin", type="password")

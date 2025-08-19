@@ -207,3 +207,14 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         y -= row_h
 
     c.save()
+
+    # --- 兼容旧调用名（ui_admin 里还在用 build_order_pdf）---
+    build_order_pdf = build_order_pdf_table
+
+
+    
+
+
+
+
+    
