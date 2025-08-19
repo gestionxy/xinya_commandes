@@ -1,0 +1,49 @@
+{
+  "order_id": "YINWANG_20250819214732",
+  "customer_name": "YIN WANG",
+  "phone": "4387796219",
+  "email": "whyprince1019@gmail.com",
+  "created_at": "2025-08-19 21:47:33",
+  "items": [
+    {
+      "name": "Roasted Tofu",
+      "qty_units": 3,
+      "qty_cases": 0,
+      "units_per_case": 30,
+      "remark": "",
+      "image_path": "/mount/src/xinya_commandes/xinya_order_platform_v4_fixed11_project/assets/products/Roasted_Tofu_20250819132311.jpg"
+    },
+    {
+      "name": "Nouilles Daoxiao",
+      "qty_units": 2,
+      "qty_cases": 3,
+      "units_per_case": 24,
+      "remark": "",
+      "image_path": "/mount/src/xinya_commandes/xinya_order_platform_v4_fixed11_project/assets/products/Nouilles_Daoxiao_20250819132311.jpg"
+    },
+    {
+      "name": "Sauce Sucre rouleaux",
+      "qty_units": 3,
+      "qty_cases": 2,
+      "units_per_case": 20,
+      "remark": "",
+      "image_path": "/mount/src/xinya_commandes/xinya_order_platform_v4_fixed11_project/assets/products/Sauce_Sucre_rouleaux_20250819132311.jpg"
+    },
+    {
+      "name": "111",
+      "qty_units": 3,
+      "qty_cases": 3,
+      "units_per_case": 0,
+      "remark": "坎坎坷坷坎坎坷坷",
+      "image_path": "/mount/src/xinya_commandes/xinya_order_platform_v4_fixed11_project/orders/YINWANG_20250819214732/custom_YINWANG_20250819214732_00.jpg"
+    },
+    {
+      "name": "22222",
+      "qty_units": 1,
+      "qty_cases": 2,
+      "units_per_case": 0,
+      "remark": "的点点滴滴的点点滴滴",
+      "image_path": "/mount/src/xinya_commandes/xinya_order_platform_v4_fixed11_project/orders/YINWANG_20250819214732/custom_YINWANG_20250819214732_01.jpg"
+    }
+  ]
+}
