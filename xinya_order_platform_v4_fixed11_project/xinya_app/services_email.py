@@ -1,2 +1,1 @@
-
 from utils.email_utils import send_email_with_attachment
