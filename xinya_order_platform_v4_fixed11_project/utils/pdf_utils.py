@@ -10,9 +10,10 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 TITLE = "Xinya Supermarché — Bon de commande"
 
-# ---------- Font handling (Arial Unicode MS preferred) ----------
-FONT_REG = "Helvetica"
-FONT_BOLD = "Helvetica-Bold"
+# -------- Font selection (Latin vs CJK) --------
+FONT_LATIN = "Helvetica"
+FONT_LATIN_BOLD = "Helvetica-Bold"
+FONT_CJK = None  # will be set to ArialUnicodeMS / Noto/SourceHan / STSong-Light
 
 def _try_register_ttf(name_hint: str, file_candidates):
     for fp in file_candidates:
@@ -26,114 +27,128 @@ def _try_register_ttf(name_hint: str, file_candidates):
     return None
 
 def _ensure_fonts():
-    """优先使用 Arial Unicode MS；否则 Noto/SourceHan；再否则 STSong-Light；最后 Helvetica。"""
-    global FONT_REG, FONT_BOLD
-
-    # 1) Arial Unicode MS (recommended by user)
-    arial_candidates = [
-        # project paths
-        "utils/fonts/ArialUnicodeMS.ttf",
-        "utils/fonts/Arial Unicode MS.ttf",
-        "assets/fonts/ArialUnicodeMS.ttf",
-        "assets/fonts/Arial Unicode MS.ttf",
-        "fonts/ArialUnicodeMS.ttf",
-        "fonts/Arial Unicode MS.ttf",
-        # common linux locations (if baked into container)
+    global FONT_LATIN, FONT_LATIN_BOLD, FONT_CJK
+    # 1) Prefer Arial Unicode MS for *both* Latin and CJK if available
+    arial = _try_register_ttf("ArialUnicodeMS", [
+        "utils/fonts/ArialUnicodeMS.ttf", "utils/fonts/Arial Unicode MS.ttf",
+        "assets/fonts/ArialUnicodeMS.ttf", "assets/fonts/Arial Unicode MS.ttf",
+        "fonts/ArialUnicodeMS.ttf", "fonts/Arial Unicode MS.ttf",
         "/usr/share/fonts/truetype/arial/ArialUnicodeMS.ttf",
         "/usr/share/fonts/truetype/msfonts/ArialUnicodeMS.ttf",
         "/usr/share/fonts/truetype/msttcorefonts/ArialUnicodeMS.ttf",
-    ]
-    arial = _try_register_ttf("ArialUnicodeMS", arial_candidates)
+    ])
     if arial:
-        FONT_REG = arial
-        FONT_BOLD = arial  # Arial Unicode MS 没有真正的 Bold；用同款代替
+        FONT_LATIN = arial
+        FONT_LATIN_BOLD = arial  # this font has no dedicated bold face
+        FONT_CJK = arial
         return
 
-    # 2) Noto Sans CJK / Source Han Sans
-    reg_candidates = [
-        "utils/fonts/NotoSansSC-Regular.otf",
-        "utils/fonts/NotoSansSC-Regular.ttf",
-        "assets/fonts/NotoSansSC-Regular.otf",
-        "assets/fonts/NotoSansSC-Regular.ttf",
+    # 2) Try Noto Sans CJK / Source Han Sans for both
+    noto = _try_register_ttf("NotoSansSC", [
+        "utils/fonts/NotoSansSC-Regular.ttf", "utils/fonts/NotoSansSC-Regular.otf",
+        "assets/fonts/NotoSansSC-Regular.ttf", "assets/fonts/NotoSansSC-Regular.otf",
+    ])
+    if noto:
+        # optional bold
+        _try_register_ttf("NotoSansSC-Bold", [
+            "utils/fonts/NotoSansSC-Bold.ttf", "utils/fonts/NotoSansSC-Bold.otf",
+            "assets/fonts/NotoSansSC-Bold.ttf", "assets/fonts/NotoSansSC-Bold.otf",
+        ])
+        FONT_LATIN = noto
+        FONT_LATIN_BOLD = "NotoSansSC-Bold" if "NotoSansSC-Bold" in pdfmetrics.getRegisteredFontNames() else noto
+        FONT_CJK = noto
+        return
+
+    shs = _try_register_ttf("SourceHanSansSC", [
         "utils/fonts/SourceHanSansSC-Regular.otf",
         "assets/fonts/SourceHanSansSC-Regular.otf",
         "utils/fonts/SourceHanSans-Regular.otf",
         "assets/fonts/SourceHanSans-Regular.otf",
-    ]
-    bold_candidates = [
-        "utils/fonts/NotoSansSC-Bold.otf",
-        "utils/fonts/NotoSansSC-Bold.ttf",
-        "assets/fonts/NotoSansSC-Bold.otf",
-        "assets/fonts/NotoSansSC-Bold.ttf",
-        "utils/fonts/SourceHanSansSC-Bold.otf",
-        "assets/fonts/SourceHanSansSC-Bold.otf",
-        "utils/fonts/SourceHanSans-Bold.otf",
-        "assets/fonts/SourceHanSans-Bold.otf",
-    ]
-    reg = _try_register_ttf("XN_Regular", reg_candidates)
-    bld = _try_register_ttf("XN_Bold", bold_candidates)
-
-    if reg:
-        FONT_REG = reg
-        FONT_BOLD = bld or reg
+    ])
+    if shs:
+        _try_register_ttf("SourceHanSansSC-Bold", [
+            "utils/fonts/SourceHanSansSC-Bold.otf",
+            "assets/fonts/SourceHanSansSC-Bold.otf",
+            "utils/fonts/SourceHanSans-Bold.otf",
+            "assets/fonts/SourceHanSans-Bold.otf",
+        ])
+        FONT_LATIN = shs
+        FONT_LATIN_BOLD = "SourceHanSansSC-Bold" if "SourceHanSansSC-Bold" in pdfmetrics.getRegisteredFontNames() else shs
+        FONT_CJK = shs
         return
 
-    # 3) fallback CJK: STSong-Light (built-in)
+    # 3) Fallback: built-in STSong for CJK, Helvetica for Latin
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
-        FONT_REG = "STSong-Light"
-        FONT_BOLD = "STSong-Light"
-        return
+        FONT_CJK = "STSong-Light"
     except Exception:
-        pass
+        FONT_CJK = "Helvetica"  # worst-case
 
-    # 4) final fallback
-    FONT_REG = "Helvetica"
-    FONT_BOLD = "Helvetica-Bold"
+# ---------- Mixed text rendering & wrapping ----------
+def _is_cjk(ch: str) -> bool:
+    code = ord(ch)
+    # CJK Unified + punctuation ranges
+    return (
+        0x4E00 <= code <= 0x9FFF or       # CJK Unified Ideographs
+        0x3400 <= code <= 0x4DBF or       # Extension A
+        0x2000 <= code <= 0x206F or       # General Punctuation
+        0x3000 <= code <= 0x303F or       # CJK Symbols and Punctuation
+        0xFF00 <= code <= 0xFFEF          # Halfwidth/Fullwidth forms
+    )
 
-# ---------- Helpers ----------
-def wrap(text, font_name, size, max_w):
+def wrap_mixed(text: str, size: float, max_w: float):
+    # Greedy wrapper that handles CJK (no spaces) and Latin (space separated).
+    # Returns list of lines. Preserves existing newlines.
     if not text:
         return []
-    words = str(text).split()
-    lines, cur = [], ""
-    for w in words:
-        test = (cur + " " + w).strip()
-        if pdfmetrics.stringWidth(test, font_name, size) <= max_w:
-            cur = test
+    lines = []
+    cur = ""
+    cur_w = 0.0
+    for ch in text:
+        if ch == "\n":
+            lines.append(cur)
+            cur, cur_w = "", 0.0
+            continue
+        font = FONT_CJK if _is_cjk(ch) else FONT_LATIN
+        ch_w = pdfmetrics.stringWidth(ch, font, size)
+        if cur_w + ch_w <= max_w or not cur:
+            cur += ch
+            cur_w += ch_w
         else:
-            if cur:
-                lines.append(cur)
-            cur = w
+            lines.append(cur.rstrip())
+            cur, cur_w = ch, ch_w
     if cur:
-        lines.append(cur)
+        lines.append(cur.rstrip())
     return lines
 
-def pluralize(n, sing, plur):
-    try:
-        n = int(n)
-    except Exception:
-        return f"{n} {plur}"
-    return f"{n} {sing if n == 1 else plur}"
+def draw_text_mixed(c, x: float, y: float, text: str, size: float):
+    # Draw a single line with mixed fonts by character, left to right.
+    cx = x
+    for ch in text:
+        font = FONT_CJK if _is_cjk(ch) else FONT_LATIN
+        c.setFont(font, size)
+        c.drawString(cx, y, ch)
+        cx += pdfmetrics.stringWidth(ch, font, size)
 
 def _leading(sz):
     return int(sz * 1.35)
 
+# ---------- Layout ----------
 def _draw_header(c, w, h, meta):
     left = 15*mm
     top = h - 20*mm
 
-    c.setFont(FONT_BOLD, 16)
+    c.setFont(FONT_LATIN_BOLD, 16)
     c.drawString(left, top, TITLE)
     y = top - 10*mm
 
-    c.setFont(FONT_REG, 10)
+    # meta line(s): pure Latin most of the time
+    c.setFont(FONT_LATIN, 10)
     order_id = meta.get("order_id","")
     client   = meta.get("customer_name","")
     tel      = meta.get("phone","")
     email    = meta.get("email","")
     created  = meta.get("created_at","")
-
     c.drawString(left, y, f"Order ID: {order_id}    Client: {client}    Tél: {tel}    Email: {email}")
     y -= 5*mm
     if created:
@@ -151,7 +166,7 @@ def _draw_header(c, w, h, meta):
     COL_PRODUCT = usable_w - (COL_PREVIEW + COL_QTY + COL_REMARK)
 
     x0 = MARG_L
-    c.setFont(FONT_REG, 9)
+    c.setFont(FONT_LATIN, 9)
     c.drawString(x0 + 2*mm,      y, "Aperçu")
     c.drawString(x0 + COL_PREVIEW + 2*mm,                   y, "Produit")
     c.drawString(x0 + COL_PREVIEW + COL_PRODUCT + 2*mm,     y, "Qté")
@@ -193,12 +208,13 @@ def build_order_pdf_table(order_data: dict, out_path: str):
 
         qty_lines = []
         if q_c:
-            qty_lines.append(pluralize(q_c, "caisse", "caisses"))
+            qty_lines.append(f"{q_c} {'caisse' if q_c == 1 else 'caisses'}")
         if q_u:
-            qty_lines.append(pluralize(q_u, "unité", "unités"))
+            qty_lines.append(f"{q_u} {'unité' if q_u == 1 else 'unités'}")
 
-        prod_lines   = wrap(name, FONT_REG, PROD_SIZE, COL_PRODUCT - 2*CELL_PAD)
-        remark_lines = wrap(remark, FONT_REG, META_SIZE, COL_REMARK - 2*CELL_PAD)
+        # wrapping
+        prod_lines   = wrap_mixed(name,   PROD_SIZE, COL_PRODUCT - 2*CELL_PAD)
+        remark_lines = wrap_mixed(remark, META_SIZE, COL_REMARK - 2*CELL_PAD)
         text_h = max(
             len(prod_lines)   * PROD_LEAD + 2*CELL_PAD,
             len(qty_lines)    * META_LEAD + 2*CELL_PAD,
@@ -221,6 +237,7 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         for xx in (x1, x2, x3, x4):
             c.line(xx, y, xx, y - row_h)
 
+        # image
         img_path = it.get("image_path")
         if img_path:
             try:
@@ -243,26 +260,28 @@ def build_order_pdf_table(order_data: dict, out_path: str):
             c.rect(x0 + CELL_PAD, y - CELL_PAD - PREVIEW_MAX_H,
                    COL_PREVIEW - 2*CELL_PAD, PREVIEW_MAX_H)
 
-        c.setFont(FONT_REG, PROD_SIZE)
+        # product name (mixed)
         ty = y - CELL_PAD - PROD_SIZE
         for line in prod_lines:
-            c.drawString(x1 + CELL_PAD, ty, line)
+            draw_text_mixed(c, x1 + CELL_PAD, ty, line, PROD_SIZE)
             ty -= PROD_LEAD
 
-        c.setFont(FONT_REG, META_SIZE)
+        # qty (Latin)
+        c.setFont(FONT_LATIN, META_SIZE)
         ty = y - CELL_PAD - META_SIZE
         for line in qty_lines:
             c.drawString(x2 + CELL_PAD, ty, line)
             ty -= META_LEAD
 
-        c.setFont(FONT_REG, META_SIZE)
+        # remark (mixed)
         ty = y - CELL_PAD - META_SIZE
         for line in remark_lines:
-            c.drawString(x3 + CELL_PAD, ty, line)
+            draw_text_mixed(c, x3 + CELL_PAD, ty, line, META_SIZE)
             ty -= META_LEAD
 
         y -= row_h
 
     c.save()
 
+# Backward compatibility
 build_order_pdf = build_order_pdf_table
