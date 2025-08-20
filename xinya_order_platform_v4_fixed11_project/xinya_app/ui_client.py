@@ -326,7 +326,7 @@ def _render_custom_card(col, idx: int):
             with top[0]:
                 st.markdown("**Personnalisé #{}**".format(idx+1))
             with top[1]:
-                st.button("Retirer", key="c_rm_{}".format(idx),
+                st.button(" - ", key="c_rm_{}".format(idx),
                           on_click=_remove_custom_row, args=(idx,))
 
             st.text_input("Nom (facultatif) #{}".format(idx+1),
