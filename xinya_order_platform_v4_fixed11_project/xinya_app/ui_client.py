@@ -109,7 +109,7 @@ def _css_once():
     .xy-card{border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:12px;}
     .xy-thumb{
       width:100%;
-      height:260px;                    /* 调高/调低改变显示大小 */
+      height:360px;                    /* 调高/调低改变显示大小 */
       background:#f3f4f6;
       border-radius:12px;
       box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
