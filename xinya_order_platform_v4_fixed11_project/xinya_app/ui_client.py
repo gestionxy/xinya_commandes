@@ -1,9 +1,10 @@
-# xinya_app/ui_client.py  (final replacement - base64 <img> to fill container)
+# xinya_app/ui_client.py  (replacement using background-image div, no st.image, unique CSS class)
 from typing import Optional, List, Dict, Any
 import json
 import base64
 from pathlib import Path
 from datetime import datetime
+import html
 
 import streamlit as st
 
@@ -53,13 +54,16 @@ def _to_data_uri(path_or_url: str) -> str:
         return path_or_url
     p = Path(path_or_url)
     if p.is_file():
-        try:
-            data = p.read_bytes()
-            b64 = base64.b64encode(data).decode("ascii")
-            # default to jpeg; browsers根据内容也能解析常见格式
-            return f"data:image/jpeg;base64,{b64}"
-        except Exception:
-            return ""
+        data = p.read_bytes()
+        b64 = base64.b64encode(data).decode("ascii")
+        # Try detect extension
+        ext = p.suffix.lower()
+        mime = "image/jpeg"
+        if ext in (".png",):
+            mime = "image/png"
+        elif ext in (".webp",):
+            mime = "image/webp"
+        return f"data:{mime};base64,{b64}"
     return ""
 
 def _prepare_img_for_pdf(img_src: Optional[str]) -> Optional[str]:
@@ -102,42 +106,28 @@ def _remove_custom_row(idx: int):
 def _css_once():
     st.markdown("""
     <style>
-    .product-card{border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:12px;}
-    .product-thumb{
+    .xy-card{border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:12px;}
+    .xy-thumb{
       width:100%;
-      height:240px;                    /* 调整高度即可改变显示大小 */
+      height:260px;                    /* 调高/调低改变显示大小 */
       background:#f3f4f6;
       border-radius:12px;
       box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
-      overflow:hidden;
-      display:flex;align-items:center;justify-content:center;
+      background-repeat:no-repeat;
+      background-position:center center;
+      background-size:contain;         /* 等比填满，不裁剪 */
       margin-bottom:8px;
-    }
-    .product-thumb img{
-      width:100% !important;
-      height:100% !important;
-      max-width:none !important;
-      object-fit:contain !important;   /* 等比填满，不裁剪 */
-      object-position:center center !important;
-      display:block;
     }
     </style>
     """, unsafe_allow_html=True)
 
-def _image_in_thumb(img_src: Optional[str]):
-    """Render image inside the fixed-height thumb using a raw <img>.
-       Local file -> data URI, so浏览器无需访问服务器路径。
-    """
-    st.markdown('<div class="product-thumb">', unsafe_allow_html=True)
-    if img_src:
-        uri = _to_data_uri(img_src)
-        if uri:
-            st.markdown(f'<img src="{uri}" alt="product" />', unsafe_allow_html=True)
-        else:
-            st.write("🖼️")
-    else:
-        st.write("🖼️")
-    st.markdown('</div>', unsafe_allow_html=True)
+def _thumb_div_style(img_src: Optional[str]) -> str:
+    if not img_src:
+        return ""
+    uri = _to_data_uri(img_src)
+    if not uri:
+        return ""
+    return f"background-image:url('{html.escape(uri)}');"
 
 def _render_custom_card(idx: int):
     item = st.session_state.custom_items[idx]
@@ -198,10 +188,11 @@ def render_client_page():
         col = cols[i % 3]
         with col:
             with st.container(border=True):
-                st.markdown('<div class="product-card">', unsafe_allow_html=True)
+                st.markdown('<div class="xy-card">', unsafe_allow_html=True)
 
                 img_src = _resolve_img_src(p.get("image") or p.get("image_path") or p.get("img"))
-                _image_in_thumb(img_src)
+                style = _thumb_div_style(img_src)
+                st.markdown(f'<div class="xy-thumb" style="{style}"></div>', unsafe_allow_html=True)
 
                 upc = int(p.get("units_per_case", 0) or 0)
                 st.caption(f"Unité / caisse：{upc or '—'}")
@@ -343,7 +334,6 @@ def render_client_page():
     except Exception as e:
         st.warning(f"保存 order.json 失败：{e}")
 
-    # download
     with open(pdf_path, "rb") as f:
         st.download_button("📄 Télécharger le PDF", data=f.read(),
                            file_name=pdf_path.name, mime="application/pdf")
