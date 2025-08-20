@@ -84,6 +84,30 @@ def _prepare_img_for_pdf(img_src: Optional[str]) -> Optional[str]:
 def render_client_page():
     st.title("🛒 Xinya Supermarché | Plateforme de commande")
 
+    # —— 页面级 CSS：让商品图“按比例充满灰底框”，不裁剪 ——
+    st.markdown("""
+    <style>
+    .product-card { border: 1px solid rgba(0,0,0,0.06); border-radius: 12px; padding: 12px; }
+    .product-thumb {
+      width: 100%;
+      height: 190px;                 /* 想更大/更清晰可改成 210/220/240 */
+      background: #f3f4f6;
+      border-radius: 12px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.05);
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 8px;
+    }
+    .product-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;           /* 关键：等比填充，不裁剪 */
+      object-position: center center;
+      display: block;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Sidebar
     with st.sidebar:
         st.header("Client")
@@ -117,12 +141,19 @@ def render_client_page():
         col = cols[i % 3]
         with col:
             with st.container(border=True):
+                st.markdown('<div class="product-card">', unsafe_allow_html=True)
+
+                # —— 图片区域：灰底框 + 等比填充（contain） ——
                 img_src = _resolve_img_src(p.get("image") or p.get("image_path") or p.get("img"))
+                st.markdown('<div class="product-thumb">', unsafe_allow_html=True)
                 if img_src:
-                    st.image(img_src, use_column_width=True)
+                    # 让 <img> 占满父容器，最终由 CSS 控制高度与 object-fit
+                    st.image(img_src, use_container_width=True)
                 else:
                     st.write("🖼️ (image introuvable)")
+                st.markdown('</div>', unsafe_allow_html=True)
 
+                # 下面是原有的数量/备注等 UI（保持不变）
                 upc = int(p.get("units_per_case", 0) or 0)
                 st.caption("Unité / caisse：{}".format(upc or "—"))
 
@@ -145,6 +176,8 @@ def render_client_page():
 
                 st.text_area("Remarque", key=rem_key, height=60,
                              placeholder="Option : découpe / emballage / goût…")
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------- Custom products: 3-column grid ----------
     st.subheader("Produits personnalisés (image OU note + quantité)")

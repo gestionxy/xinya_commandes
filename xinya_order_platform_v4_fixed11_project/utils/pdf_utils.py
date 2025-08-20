@@ -248,28 +248,40 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         for xx in (x1, x2, x3, x4):
             c.line(xx, y, xx, y - row_h)
 
-        # -------- 预览图片：使用“整行高度 - 内边距”的可用高度，按比例放大并居中（不裁剪）--------
+        # ---- 预览图片：按比例放大（不裁剪、不变形），尽量占满格子 ----
         img_path = it.get("image_path")
-        box_w = COL_PREVIEW - 2*CELL_PAD
-        box_h = row_h - 2*CELL_PAD  # 关键：用整行高度，让图片尽可能大
+
+        PREVIEW_PAD = 1*mm  # 图片格子内边距调小，让图更大；不影响整行行高
+        box_w = COL_PREVIEW - 2*PREVIEW_PAD
+        box_h = row_h         - 2*PREVIEW_PAD  # 用整行高度（减去内边距）
 
         if img_path:
             try:
                 img = ImageReader(img_path)
                 iw, ih = img.getSize()
-                scale  = min(box_w / iw, box_h / ih)  # contain
+
+                # contain：保证完整显示，不裁剪
+                scale  = min(box_w / iw, box_h / ih)
                 draw_w = iw * scale
                 draw_h = ih * scale
-                img_x = x0 + CELL_PAD + (box_w - draw_w) / 2
-                img_y = y - CELL_PAD - draw_h - (box_h - draw_h) / 2
-                c.drawImage(img, img_x, img_y, draw_w, draw_h,
-                            preserveAspectRatio=True, mask='auto')
+
+                # 居中放置
+                img_x = x0 + PREVIEW_PAD + (box_w - draw_w) / 2
+                img_y = y  - PREVIEW_PAD - draw_h - (box_h - draw_h) / 2
+
+                c.drawImage(
+                    img, img_x, img_y, draw_w, draw_h,
+                    preserveAspectRatio=True, mask='auto'
+                )
             except Exception:
+                # 失败则画占位框（同尺寸）
                 c.setLineWidth(0.5)
-                c.rect(x0 + CELL_PAD, y - CELL_PAD - box_h, box_w, box_h)
+                c.rect(x0 + PREVIEW_PAD, y - PREVIEW_PAD - box_h, box_w, box_h)
         else:
+            # 无图也画占位框，保持对齐
             c.setLineWidth(0.5)
-            c.rect(x0 + CELL_PAD, y - CELL_PAD - box_h, box_w, box_h)
+            c.rect(x0 + PREVIEW_PAD, y - PREVIEW_PAD - box_h, box_w, box_h)
+
 
         # 产品名（混排）
         ty = y - CELL_PAD - PROD_SIZE
