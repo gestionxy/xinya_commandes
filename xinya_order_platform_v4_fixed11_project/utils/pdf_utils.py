@@ -6,6 +6,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 TITLE = "Xinya Supermarché — Bon de commande"
 
@@ -13,7 +14,7 @@ TITLE = "Xinya Supermarché — Bon de commande"
 FONT_REG = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 
-def _try_register_font(name_hint: str, file_candidates):
+def _try_register_ttf(name_hint: str, file_candidates):
     for fp in file_candidates:
         p = Path(fp)
         if p.is_file():
@@ -25,8 +26,11 @@ def _try_register_font(name_hint: str, file_candidates):
     return None
 
 def _ensure_fonts():
+    """
+    优先使用项目内 TrueType/OpenType 字体（如 NotoSansSC / SourceHanSans），
+    否则回退到内置的 CJK 字体 STSong-Light（无需字体文件）。
+    """
     global FONT_REG, FONT_BOLD
-    # candidates for Noto/SourceHan (put your font files in any of these paths)
     reg_candidates = [
         "utils/fonts/NotoSansSC-Regular.otf",
         "utils/fonts/NotoSansSC-Regular.ttf",
@@ -34,6 +38,8 @@ def _ensure_fonts():
         "assets/fonts/NotoSansSC-Regular.ttf",
         "utils/fonts/SourceHanSansSC-Regular.otf",
         "assets/fonts/SourceHanSansSC-Regular.otf",
+        "utils/fonts/SourceHanSans-Regular.otf",
+        "assets/fonts/SourceHanSans-Regular.otf",
     ]
     bold_candidates = [
         "utils/fonts/NotoSansSC-Bold.otf",
@@ -42,16 +48,27 @@ def _ensure_fonts():
         "assets/fonts/NotoSansSC-Bold.ttf",
         "utils/fonts/SourceHanSansSC-Bold.otf",
         "assets/fonts/SourceHanSansSC-Bold.otf",
+        "utils/fonts/SourceHanSans-Bold.otf",
+        "assets/fonts/SourceHanSans-Bold.otf",
     ]
-    reg = _try_register_font("XN_Regular", reg_candidates)
-    bld = _try_register_font("XN_Bold", bold_candidates)
+
+    reg = _try_register_ttf("XN_Regular", reg_candidates)
+    bld = _try_register_ttf("XN_Bold", bold_candidates)
+
     if reg:
         FONT_REG = reg
-    if reg and bld:
-        FONT_BOLD = bld
-    elif reg and not bld:
-        # fallback: use regular font for bold too
-        FONT_BOLD = reg
+        FONT_BOLD = bld or reg
+        return
+
+    # 无 TTF: 使用内置 CJK 字体，保证中文可显示
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        FONT_REG = "STSong-Light"
+        FONT_BOLD = "STSong-Light"  # 没有粗体版本，用同一个
+    except Exception:
+        # 最后兜底仍然是 Helvetica（可能出现方块）
+        FONT_REG = "Helvetica"
+        FONT_BOLD = "Helvetica-Bold"
 
 # ---------- Text wrapping with chosen font ----------
 def wrap(text, font_name, size, max_w):
@@ -79,7 +96,6 @@ def pluralize(n, sing, plur):
     return f"{n} {sing if n == 1 else plur}"
 
 def _leading(sz):
-    # comfortable line spacing to avoid overlap
     return int(sz * 1.35)
 
 def _draw_header(c, w, h, meta):
@@ -103,11 +119,9 @@ def _draw_header(c, w, h, meta):
         c.drawString(left, y, f"Créé le: {created}")
         y -= 5*mm
 
-    # top rule
     c.line(15*mm, y, w - 15*mm, y)
     y -= 7*mm
 
-    # column widths
     MARG_L = 15*mm; MARG_R = 15*mm
     usable_w = w - MARG_L - MARG_R
     COL_PREVIEW = 32*mm
@@ -115,7 +129,6 @@ def _draw_header(c, w, h, meta):
     COL_REMARK  = 45*mm
     COL_PRODUCT = usable_w - (COL_PREVIEW + COL_QTY + COL_REMARK)
 
-    # header labels
     x0 = MARG_L
     c.setFont(FONT_REG, 9)
     c.drawString(x0 + 2*mm,      y, "Aperçu")
@@ -128,7 +141,6 @@ def _draw_header(c, w, h, meta):
     return y, (MARG_L, usable_w, COL_PREVIEW, COL_PRODUCT, COL_QTY, COL_REMARK)
 
 def build_order_pdf_table(order_data: dict, out_path: str):
-    # make sure fonts are ready
     _ensure_fonts()
 
     c = canvas.Canvas(out_path, pagesize=A4)
@@ -138,7 +150,7 @@ def build_order_pdf_table(order_data: dict, out_path: str):
     MARG_L, usable_w, COL_PREVIEW, COL_PRODUCT, COL_QTY, COL_REMARK = cols
 
     items = (order_data or {}).get("items", [])
-    MIN_ROW_H = 28*mm            # a bit taller to accommodate fonts
+    MIN_ROW_H = 28*mm
     PREVIEW_MAX_H = 22*mm
     CELL_PAD = 3*mm
 
@@ -159,14 +171,12 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         upc  = int(it.get("units_per_case") or 0)
         remark = (it.get("remark") or "").strip()
 
-        total_units = (q_u or 0) + (q_c or 0) * (upc or 0)
+        # Quantity lines (NO 'Total' line any more)
         qty_lines = []
         if q_c:
             qty_lines.append(pluralize(q_c, "caisse", "caisses"))
         if q_u:
             qty_lines.append(pluralize(q_u, "unité", "unités"))
-        if total_units:
-            qty_lines.append(f"Total: {total_units} unités")
 
         prod_lines   = wrap(name, FONT_REG, PROD_SIZE, COL_PRODUCT - 2*CELL_PAD)
         remark_lines = wrap(remark, FONT_REG, META_SIZE, COL_REMARK - 2*CELL_PAD)
@@ -178,24 +188,20 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         )
         row_h = max(MIN_ROW_H, text_h)
 
-        # page break
         if y - row_h < 20*mm:
             new_page()
 
-        # column x positions
         x0 = MARG_L
         x1 = x0 + COL_PREVIEW
         x2 = x1 + COL_PRODUCT
         x3 = x2 + COL_QTY
         x4 = x3 + COL_REMARK
 
-        # borders
         c.line(MARG_L, y, x4, y)
         c.line(MARG_L, y - row_h, x4, y - row_h)
         for xx in (x1, x2, x3, x4):
             c.line(xx, y, xx, y - row_h)
 
-        # 1) preview image
         img_path = it.get("image_path")
         if img_path:
             try:
@@ -218,21 +224,18 @@ def build_order_pdf_table(order_data: dict, out_path: str):
             c.rect(x0 + CELL_PAD, y - CELL_PAD - PREVIEW_MAX_H,
                    COL_PREVIEW - 2*CELL_PAD, PREVIEW_MAX_H)
 
-        # 2) product name
         c.setFont(FONT_REG, PROD_SIZE)
-        ty = y - CELL_PAD - PROD_SIZE  # baseline start
+        ty = y - CELL_PAD - PROD_SIZE
         for line in prod_lines:
             c.drawString(x1 + CELL_PAD, ty, line)
             ty -= PROD_LEAD
 
-        # 3) quantities
         c.setFont(FONT_REG, META_SIZE)
         ty = y - CELL_PAD - META_SIZE
         for line in qty_lines:
             c.drawString(x2 + CELL_PAD, ty, line)
             ty -= META_LEAD
 
-        # 4) remarks
         c.setFont(FONT_REG, META_SIZE)
         ty = y - CELL_PAD - META_SIZE
         for line in remark_lines:
