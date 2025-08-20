@@ -10,7 +10,7 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 TITLE = "Xinya Supermarché — Bon de commande"
 
-# ---------- Font handling (CJK-safe) ----------
+# ---------- Font handling (Arial Unicode MS preferred) ----------
 FONT_REG = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 
@@ -26,11 +26,30 @@ def _try_register_ttf(name_hint: str, file_candidates):
     return None
 
 def _ensure_fonts():
-    """
-    优先使用项目内 TrueType/OpenType 字体（如 NotoSansSC / SourceHanSans），
-    否则回退到内置的 CJK 字体 STSong-Light（无需字体文件）。
-    """
+    """优先使用 Arial Unicode MS；否则 Noto/SourceHan；再否则 STSong-Light；最后 Helvetica。"""
     global FONT_REG, FONT_BOLD
+
+    # 1) Arial Unicode MS (recommended by user)
+    arial_candidates = [
+        # project paths
+        "utils/fonts/ArialUnicodeMS.ttf",
+        "utils/fonts/Arial Unicode MS.ttf",
+        "assets/fonts/ArialUnicodeMS.ttf",
+        "assets/fonts/Arial Unicode MS.ttf",
+        "fonts/ArialUnicodeMS.ttf",
+        "fonts/Arial Unicode MS.ttf",
+        # common linux locations (if baked into container)
+        "/usr/share/fonts/truetype/arial/ArialUnicodeMS.ttf",
+        "/usr/share/fonts/truetype/msfonts/ArialUnicodeMS.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/ArialUnicodeMS.ttf",
+    ]
+    arial = _try_register_ttf("ArialUnicodeMS", arial_candidates)
+    if arial:
+        FONT_REG = arial
+        FONT_BOLD = arial  # Arial Unicode MS 没有真正的 Bold；用同款代替
+        return
+
+    # 2) Noto Sans CJK / Source Han Sans
     reg_candidates = [
         "utils/fonts/NotoSansSC-Regular.otf",
         "utils/fonts/NotoSansSC-Regular.ttf",
@@ -51,7 +70,6 @@ def _ensure_fonts():
         "utils/fonts/SourceHanSans-Bold.otf",
         "assets/fonts/SourceHanSans-Bold.otf",
     ]
-
     reg = _try_register_ttf("XN_Regular", reg_candidates)
     bld = _try_register_ttf("XN_Bold", bold_candidates)
 
@@ -60,17 +78,20 @@ def _ensure_fonts():
         FONT_BOLD = bld or reg
         return
 
-    # 无 TTF: 使用内置 CJK 字体，保证中文可显示
+    # 3) fallback CJK: STSong-Light (built-in)
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
         FONT_REG = "STSong-Light"
-        FONT_BOLD = "STSong-Light"  # 没有粗体版本，用同一个
+        FONT_BOLD = "STSong-Light"
+        return
     except Exception:
-        # 最后兜底仍然是 Helvetica（可能出现方块）
-        FONT_REG = "Helvetica"
-        FONT_BOLD = "Helvetica-Bold"
+        pass
 
-# ---------- Text wrapping with chosen font ----------
+    # 4) final fallback
+    FONT_REG = "Helvetica"
+    FONT_BOLD = "Helvetica-Bold"
+
+# ---------- Helpers ----------
 def wrap(text, font_name, size, max_w):
     if not text:
         return []
@@ -168,10 +189,8 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         name = (it.get("name") or "").strip()
         q_u  = int(it.get("qty_units") or 0)
         q_c  = int(it.get("qty_cases") or 0)
-        upc  = int(it.get("units_per_case") or 0)
         remark = (it.get("remark") or "").strip()
 
-        # Quantity lines (NO 'Total' line any more)
         qty_lines = []
         if q_c:
             qty_lines.append(pluralize(q_c, "caisse", "caisses"))
@@ -246,5 +265,4 @@ def build_order_pdf_table(order_data: dict, out_path: str):
 
     c.save()
 
-# Backward compat
 build_order_pdf = build_order_pdf_table
