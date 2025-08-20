@@ -148,7 +148,16 @@ def render_client_page():
                 st.markdown('<div class="product-thumb">', unsafe_allow_html=True)
                 if img_src:
                     # 让 <img> 占满父容器，最终由 CSS 控制高度与 object-fit
-                    st.image(img_src, use_container_width=True)
+                    # 原来是：
+                    # st.image(img_src, use_container_width=True)
+
+                    # 改成（向后兼容旧版 Streamlit）：
+                    try:
+                        st.image(img_src, use_container_width=True)
+                    except TypeError:
+                        # 旧版只支持 use_column_width
+                        st.image(img_src, use_column_width=True)
+
                 else:
                     st.write("🖼️ (image introuvable)")
                 st.markdown('</div>', unsafe_allow_html=True)
