@@ -85,13 +85,13 @@ def render_client_page():
     st.title("🛒 Xinya Supermarché | Plateforme de commande")
 
     st.info("""📌 下单须知：  
-    1️⃣ 下单前请确认您已在左侧栏正确输入姓名、电话和邮箱。  
+    1️⃣ 下单前请确认您已在左侧栏正确输入姓名、电话和邮箱。 输入完成后按提示点击Enter键。  
     2️⃣ 商品可选择数量，单位为：个（unité）或箱（caisse）。  
     3️⃣ 系统正在完善中，如自选商品中没有您需要的，请在下方上传商品图片，并填写名称、数量及备注。我们的工作人员会及时与您联系。  
     """)
 
     st.info("""📌 Consignes de commande :  
-    1️⃣ Avant de passer commande, veuillez vérifier que vous avez bien saisi votre nom, téléphone et courriel dans la barre de gauche.  
+    1️⃣ Avant de passer commande, veuillez vérifier que vous avez bien saisi votre nom, téléphone et courriel dans la barre de gauche. Une fois saisi, appuyez sur la touche Entrée comme indiqué.  
     2️⃣ Vous pouvez choisir la quantité, avec les unités suivantes : unité ou caisse.  
     3️⃣ Comme notre système est en cours d’amélioration, si le produit souhaité n’apparaît pas dans les options, veuillez télécharger son image ci-dessous, ajouter le nom, la quantité et vos remarques. Notre équipe vous contactera rapidement.  
     """)
