@@ -1,5 +1,4 @@
 # xinya_app/ui_client.py
-# Clean version without future imports and without risky line continuations
 from typing import Optional
 import json
 from pathlib import Path
@@ -31,7 +30,6 @@ def _init_custom_state():
             "name": "",
             "qty_units": 0,
             "qty_cases": 0,
-            "units_per_case": 0,
             "remark": "",
             "file": None,
         }]
@@ -41,7 +39,6 @@ def _add_custom_row():
         "name": "",
         "qty_units": 0,
         "qty_cases": 0,
-        "units_per_case": 0,
         "remark": "",
         "file": None,
     })
@@ -149,53 +146,36 @@ def render_client_page():
                 st.text_area("Remarque", key=rem_key, height=60,
                              placeholder="Option : découpe / emballage / goût…")
 
-    # Custom products (left card list + right add button)
+    # ---------- Custom products: 3-column grid ----------
     st.subheader("Produits personnalisés (image OU note + quantité)")
-    left_col, right_col = st.columns([3, 2])
-    with right_col:
-        st.container(border=True)
-        st.button("➕ Ajouter", on_click=_add_custom_row, use_container_width=True)
 
-    with left_col:
-        _init_custom_state()
-        for idx, item in enumerate(st.session_state.custom_items):
-            with st.container(border=True):
-                top = st.columns([5, 1])
-                with top[0]:
-                    st.markdown("**Personnalisé #{}**".format(idx+1))
-                with top[1]:
-                    st.button("Retirer", key="c_rm_{}".format(idx),
-                              on_click=_remove_custom_row, args=(idx,))
-
-                st.text_input("Nom (facultatif) #{}".format(idx+1),
-                              key="c_name_{}".format(idx), value=item["name"],
-                              on_change=lambda i=idx: _sync_custom_text(i, "name"))
-
-                st.file_uploader("Image (facultatif) #{}".format(idx+1),
-                                 type=["jpg", "jpeg", "png"],
-                                 key="c_file_{}".format(idx),
-                                 on_change=lambda i=idx: _sync_custom_file(i))
-
-                st.text_area("Note (facultatif) #{}".format(idx+1),
-                             key="c_rem_{}".format(idx), value=item["remark"], height=90,
-                             on_change=lambda i=idx: _sync_custom_text(i, "remark"))
-
-                row = st.columns(2)
-                with row[0]:
-                    st.number_input("Quantité (unités) * #{}".format(idx+1),
-                                    min_value=0, step=1,
-                                    key="c_qtyu_{}".format(idx), value=item["qty_units"],
-                                    on_change=lambda i=idx: _sync_custom_num(i, "qty_units"))
-                with row[1]:
-                    st.number_input("Quantité (caisses) * #{}".format(idx+1),
-                                    min_value=0, step=1,
-                                    key="c_qtyc_{}".format(idx), value=item["qty_cases"],
-                                    on_change=lambda i=idx: _sync_custom_num(i, "qty_cases"))
-
-                st.number_input("Unités / caisse (option) #{}".format(idx+1),
-                                min_value=0, step=1,
-                                key="c_upc_{}".format(idx), value=item["units_per_case"],
-                                on_change=lambda i=idx: _sync_custom_num(i, "units_per_case"))
+    _init_custom_state()
+    items = st.session_state.custom_items
+    plus_rendered = False
+    start = 0
+    while True:
+        cols = st.columns(3)
+        # Fill three slots per row
+        for pos in range(3):
+            col = cols[pos]
+            idx = start + pos
+            if idx < len(items):
+                _render_custom_card(col, idx)
+            elif not plus_rendered:
+                with col:
+                    st.container(border=True)
+                    st.button("➕ Ajouter", on_click=_add_custom_row, use_container_width=True, key=f"add_row_{start}")
+                plus_rendered = True
+            else:
+                # empty slot
+                with col:
+                    st.write("")
+        start += 3
+        if start >= len(items) and plus_rendered:
+            break
+        if start >= len(items) and not plus_rendered:
+            # still need to render a row to place plus
+            continue
 
     # Submit
     st.markdown("---")
@@ -229,11 +209,11 @@ def render_client_page():
             }
             chosen.append(item)
 
+    # Custom items: NO 'units_per_case' field; fix to 0
     for idx, item in enumerate(st.session_state.custom_items):
         q_u = int(item.get("qty_units", 0) or int(st.session_state.get("c_qtyu_{}".format(idx), 0) or 0))
         q_c = int(item.get("qty_cases", 0) or int(st.session_state.get("c_qtyc_{}".format(idx), 0) or 0))
         name = (item.get("name") or st.session_state.get("c_name_{}".format(idx), "")).strip()
-        upc = int(item.get("units_per_case", 0) or int(st.session_state.get("c_upc_{}".format(idx), 0) or 0))
         remark = (item.get("remark") or st.session_state.get("c_rem_{}".format(idx), "")).strip()
         fileobj = st.session_state.get("c_file_{}".format(idx))
 
@@ -258,7 +238,7 @@ def render_client_page():
             "name": name or "Personnalisé #{}".format(idx+1),
             "qty_units": q_u,
             "qty_cases": q_c,
-            "units_per_case": upc,
+            "units_per_case": 0,  # removed from UI; set to 0
             "remark": remark,
             "image_path": img_path,
         })
@@ -308,7 +288,7 @@ def render_client_page():
             legacy_send(subject, body, to_list, [str(pdf_path)])
         st.success("✅ Commande envoyée ! Le PDF a été expédié à l'admin et au client.")
     except Exception as e:
-        st.warning("⚠️ L'e-mail n'a pas été envoyé : {}\nLe PDF 已生成在本地。".format(e))
+        st.warning("⚠️ L'e-mail n'a不是被发送：{}\nPDF 已生成在本地。".format(e))
 
     try:
         se = st.secrets
@@ -338,6 +318,42 @@ def render_client_page():
     st.info("ID de commande : **{}**".format(order_id))
 
 
+def _render_custom_card(col, idx: int):
+    item = st.session_state.custom_items[idx]
+    with col:
+        with st.container(border=True):
+            top = st.columns([5, 1])
+            with top[0]:
+                st.markdown("**Personnalisé #{}**".format(idx+1))
+            with top[1]:
+                st.button("Retirer", key="c_rm_{}".format(idx),
+                          on_click=_remove_custom_row, args=(idx,))
+
+            st.text_input("Nom (facultatif) #{}".format(idx+1),
+                          key="c_name_{}".format(idx), value=item["name"],
+                          on_change=lambda i=idx: _sync_custom_text(i, "name"))
+
+            st.file_uploader("Image (facultatif) #{}".format(idx+1),
+                             type=["jpg", "jpeg", "png"],
+                             key="c_file_{}".format(idx),
+                             on_change=lambda i=idx: _sync_custom_file(i))
+
+            st.text_area("Note (facultatif) #{}".format(idx+1),
+                         key="c_rem_{}".format(idx), value=item["remark"], height=90,
+                         on_change=lambda i=idx: _sync_custom_text(i, "remark"))
+
+            row = st.columns(2)
+            with row[0]:
+                st.number_input("Quantité (unités) * #{}".format(idx+1),
+                                min_value=0, step=1,
+                                key="c_qtyu_{}".format(idx), value=item["qty_units"],
+                                on_change=lambda i=idx: _sync_custom_num(i, "qty_units"))
+            with row[1]:
+                st.number_input("Quantité (caisses) * #{}".format(idx+1),
+                                min_value=0, step=1,
+                                key="c_qtyc_{}".format(idx), value=item["qty_cases"],
+                                on_change=lambda i=idx: _sync_custom_num(i, "qty_cases"))
+
 # -----------------------
 # State sync
 # -----------------------
@@ -358,7 +374,7 @@ def _sync_custom_num(i: int, field: str):
     elif field == "qty_cases":
         key = "c_qtyc_{}".format(i)
     else:
-        key = "c_upc_{}".format(i)
+        key = "c_qtyu_{}".format(i)  # never used
     st.session_state.custom_items[i][field] = int(st.session_state.get(key, 0) or 0)
 
 def _sync_custom_file(i: int):

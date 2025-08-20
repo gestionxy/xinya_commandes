@@ -1,20 +1,67 @@
 # utils/pdf_utils.py
+from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 TITLE = "Xinya Supermarché — Bon de commande"
 
-def wrap(text, font, size, max_w):
+# ---------- Font handling (CJK-safe) ----------
+FONT_REG = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+
+def _try_register_font(name_hint: str, file_candidates):
+    for fp in file_candidates:
+        p = Path(fp)
+        if p.is_file():
+            try:
+                pdfmetrics.registerFont(TTFont(name_hint, str(p)))
+                return name_hint
+            except Exception:
+                pass
+    return None
+
+def _ensure_fonts():
+    global FONT_REG, FONT_BOLD
+    # candidates for Noto/SourceHan (put your font files in any of these paths)
+    reg_candidates = [
+        "utils/fonts/NotoSansSC-Regular.otf",
+        "utils/fonts/NotoSansSC-Regular.ttf",
+        "assets/fonts/NotoSansSC-Regular.otf",
+        "assets/fonts/NotoSansSC-Regular.ttf",
+        "utils/fonts/SourceHanSansSC-Regular.otf",
+        "assets/fonts/SourceHanSansSC-Regular.otf",
+    ]
+    bold_candidates = [
+        "utils/fonts/NotoSansSC-Bold.otf",
+        "utils/fonts/NotoSansSC-Bold.ttf",
+        "assets/fonts/NotoSansSC-Bold.otf",
+        "assets/fonts/NotoSansSC-Bold.ttf",
+        "utils/fonts/SourceHanSansSC-Bold.otf",
+        "assets/fonts/SourceHanSansSC-Bold.otf",
+    ]
+    reg = _try_register_font("XN_Regular", reg_candidates)
+    bld = _try_register_font("XN_Bold", bold_candidates)
+    if reg:
+        FONT_REG = reg
+    if reg and bld:
+        FONT_BOLD = bld
+    elif reg and not bld:
+        # fallback: use regular font for bold too
+        FONT_BOLD = reg
+
+# ---------- Text wrapping with chosen font ----------
+def wrap(text, font_name, size, max_w):
     if not text:
         return []
     words = str(text).split()
     lines, cur = [], ""
     for w in words:
         test = (cur + " " + w).strip()
-        if pdfmetrics.stringWidth(test, font, size) <= max_w:
+        if pdfmetrics.stringWidth(test, font_name, size) <= max_w:
             cur = test
         else:
             if cur:
@@ -31,15 +78,19 @@ def pluralize(n, sing, plur):
         return f"{n} {plur}"
     return f"{n} {sing if n == 1 else plur}"
 
+def _leading(sz):
+    # comfortable line spacing to avoid overlap
+    return int(sz * 1.35)
+
 def _draw_header(c, w, h, meta):
     left = 15*mm
     top = h - 20*mm
 
-    c.setFont("Helvetica-Bold", 16)
+    c.setFont(FONT_BOLD, 16)
     c.drawString(left, top, TITLE)
-    y = top - 8*mm
+    y = top - 10*mm
 
-    c.setFont("Helvetica", 10)
+    c.setFont(FONT_REG, 10)
     order_id = meta.get("order_id","")
     client   = meta.get("customer_name","")
     tel      = meta.get("phone","")
@@ -52,9 +103,11 @@ def _draw_header(c, w, h, meta):
         c.drawString(left, y, f"Créé le: {created}")
         y -= 5*mm
 
+    # top rule
     c.line(15*mm, y, w - 15*mm, y)
     y -= 7*mm
 
+    # column widths
     MARG_L = 15*mm; MARG_R = 15*mm
     usable_w = w - MARG_L - MARG_R
     COL_PREVIEW = 32*mm
@@ -62,8 +115,9 @@ def _draw_header(c, w, h, meta):
     COL_REMARK  = 45*mm
     COL_PRODUCT = usable_w - (COL_PREVIEW + COL_QTY + COL_REMARK)
 
+    # header labels
     x0 = MARG_L
-    c.setFont("Helvetica", 9)
+    c.setFont(FONT_REG, 9)
     c.drawString(x0 + 2*mm,      y, "Aperçu")
     c.drawString(x0 + COL_PREVIEW + 2*mm,                   y, "Produit")
     c.drawString(x0 + COL_PREVIEW + COL_PRODUCT + 2*mm,     y, "Qté")
@@ -74,6 +128,9 @@ def _draw_header(c, w, h, meta):
     return y, (MARG_L, usable_w, COL_PREVIEW, COL_PRODUCT, COL_QTY, COL_REMARK)
 
 def build_order_pdf_table(order_data: dict, out_path: str):
+    # make sure fonts are ready
+    _ensure_fonts()
+
     c = canvas.Canvas(out_path, pagesize=A4)
     w, h = A4
 
@@ -81,10 +138,14 @@ def build_order_pdf_table(order_data: dict, out_path: str):
     MARG_L, usable_w, COL_PREVIEW, COL_PRODUCT, COL_QTY, COL_REMARK = cols
 
     items = (order_data or {}).get("items", [])
-    MIN_ROW_H = 26*mm
+    MIN_ROW_H = 28*mm            # a bit taller to accommodate fonts
     PREVIEW_MAX_H = 22*mm
     CELL_PAD = 3*mm
-    LINE_H = 5.2
+
+    PROD_SIZE = 11
+    META_SIZE = 10
+    PROD_LEAD = _leading(PROD_SIZE)
+    META_LEAD = _leading(META_SIZE)
 
     def new_page():
         nonlocal y
@@ -107,30 +168,34 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         if total_units:
             qty_lines.append(f"Total: {total_units} unités")
 
-        prod_lines   = wrap(name, "Helvetica", 11, COL_PRODUCT - 2*CELL_PAD)
-        remark_lines = wrap(remark, "Helvetica", 10, COL_REMARK - 2*CELL_PAD)
+        prod_lines   = wrap(name, FONT_REG, PROD_SIZE, COL_PRODUCT - 2*CELL_PAD)
+        remark_lines = wrap(remark, FONT_REG, META_SIZE, COL_REMARK - 2*CELL_PAD)
         text_h = max(
-            len(prod_lines)   * LINE_H + 2*CELL_PAD,
-            len(qty_lines)    * LINE_H + 2*CELL_PAD,
-            len(remark_lines) * LINE_H + 2*CELL_PAD,
+            len(prod_lines)   * PROD_LEAD + 2*CELL_PAD,
+            len(qty_lines)    * META_LEAD + 2*CELL_PAD,
+            len(remark_lines) * META_LEAD + 2*CELL_PAD,
             PREVIEW_MAX_H + 2*CELL_PAD
         )
         row_h = max(MIN_ROW_H, text_h)
 
+        # page break
         if y - row_h < 20*mm:
             new_page()
 
+        # column x positions
         x0 = MARG_L
         x1 = x0 + COL_PREVIEW
         x2 = x1 + COL_PRODUCT
         x3 = x2 + COL_QTY
         x4 = x3 + COL_REMARK
 
+        # borders
         c.line(MARG_L, y, x4, y)
         c.line(MARG_L, y - row_h, x4, y - row_h)
         for xx in (x1, x2, x3, x4):
             c.line(xx, y, xx, y - row_h)
 
+        # 1) preview image
         img_path = it.get("image_path")
         if img_path:
             try:
@@ -153,26 +218,30 @@ def build_order_pdf_table(order_data: dict, out_path: str):
             c.rect(x0 + CELL_PAD, y - CELL_PAD - PREVIEW_MAX_H,
                    COL_PREVIEW - 2*CELL_PAD, PREVIEW_MAX_H)
 
-        c.setFont("Helvetica", 11)
-        ty = y - CELL_PAD - 12
+        # 2) product name
+        c.setFont(FONT_REG, PROD_SIZE)
+        ty = y - CELL_PAD - PROD_SIZE  # baseline start
         for line in prod_lines:
             c.drawString(x1 + CELL_PAD, ty, line)
-            ty -= LINE_H
+            ty -= PROD_LEAD
 
-        c.setFont("Helvetica", 10)
-        ty = y - CELL_PAD - 12
+        # 3) quantities
+        c.setFont(FONT_REG, META_SIZE)
+        ty = y - CELL_PAD - META_SIZE
         for line in qty_lines:
             c.drawString(x2 + CELL_PAD, ty, line)
-            ty -= LINE_H
+            ty -= META_LEAD
 
-        c.setFont("Helvetica", 10)
-        ty = y - CELL_PAD - 12
+        # 4) remarks
+        c.setFont(FONT_REG, META_SIZE)
+        ty = y - CELL_PAD - META_SIZE
         for line in remark_lines:
             c.drawString(x3 + CELL_PAD, ty, line)
-            ty -= LINE_H
+            ty -= META_LEAD
 
         y -= row_h
 
     c.save()
 
+# Backward compat
 build_order_pdf = build_order_pdf_table
