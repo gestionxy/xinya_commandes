@@ -1,4 +1,5 @@
 # utils/pdf_utils.py
+# utils/pdf_utils.py
 from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -10,10 +11,10 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 TITLE = "Xinya Supermarché — Bon de commande"
 
-# -------- Font selection (Latin vs CJK) --------
+# -------- 字体选择（拉丁 vs CJK 混排）--------
 FONT_LATIN = "Helvetica"
 FONT_LATIN_BOLD = "Helvetica-Bold"
-FONT_CJK = None  # will be set to ArialUnicodeMS / Noto/SourceHan / STSong-Light
+FONT_CJK = None  # 运行时设置为 ArialUnicodeMS / Noto / SourceHan / STSong-Light
 
 def _try_register_ttf(name_hint: str, file_candidates):
     for fp in file_candidates:
@@ -27,8 +28,10 @@ def _try_register_ttf(name_hint: str, file_candidates):
     return None
 
 def _ensure_fonts():
+    """优先 Arial Unicode MS；其次 Noto/Source Han；再否则内置 STSong；最后 Helvetica。"""
     global FONT_LATIN, FONT_LATIN_BOLD, FONT_CJK
-    # 1) Prefer Arial Unicode MS for *both* Latin and CJK if available
+
+    # 1) Arial Unicode MS
     arial = _try_register_ttf("ArialUnicodeMS", [
         "utils/fonts/ArialUnicodeMS.ttf", "utils/fonts/Arial Unicode MS.ttf",
         "assets/fonts/ArialUnicodeMS.ttf", "assets/fonts/Arial Unicode MS.ttf",
@@ -39,17 +42,16 @@ def _ensure_fonts():
     ])
     if arial:
         FONT_LATIN = arial
-        FONT_LATIN_BOLD = arial  # this font has no dedicated bold face
+        FONT_LATIN_BOLD = arial     # 这款字体没有独立粗体，用同款代替
         FONT_CJK = arial
         return
 
-    # 2) Try Noto Sans CJK / Source Han Sans for both
+    # 2) Noto Sans CJK
     noto = _try_register_ttf("NotoSansSC", [
         "utils/fonts/NotoSansSC-Regular.ttf", "utils/fonts/NotoSansSC-Regular.otf",
         "assets/fonts/NotoSansSC-Regular.ttf", "assets/fonts/NotoSansSC-Regular.otf",
     ])
     if noto:
-        # optional bold
         _try_register_ttf("NotoSansSC-Bold", [
             "utils/fonts/NotoSansSC-Bold.ttf", "utils/fonts/NotoSansSC-Bold.otf",
             "assets/fonts/NotoSansSC-Bold.ttf", "assets/fonts/NotoSansSC-Bold.otf",
@@ -59,6 +61,7 @@ def _ensure_fonts():
         FONT_CJK = noto
         return
 
+    # 3) Source Han Sans
     shs = _try_register_ttf("SourceHanSansSC", [
         "utils/fonts/SourceHanSansSC-Regular.otf",
         "assets/fonts/SourceHanSansSC-Regular.otf",
@@ -77,33 +80,29 @@ def _ensure_fonts():
         FONT_CJK = shs
         return
 
-    # 3) Fallback: built-in STSong for CJK, Helvetica for Latin
+    # 4) 兜底：CJK 用 STSong-Light，拉丁用 Helvetica
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
         FONT_CJK = "STSong-Light"
     except Exception:
-        FONT_CJK = "Helvetica"  # worst-case
+        FONT_CJK = "Helvetica"
 
-# ---------- Mixed text rendering & wrapping ----------
+# ---------- 混排宽度/换行 ----------
 def _is_cjk(ch: str) -> bool:
     code = ord(ch)
-    # CJK Unified + punctuation ranges
     return (
-        0x4E00 <= code <= 0x9FFF or       # CJK Unified Ideographs
-        0x3400 <= code <= 0x4DBF or       # Extension A
-        0x2000 <= code <= 0x206F or       # General Punctuation
-        0x3000 <= code <= 0x303F or       # CJK Symbols and Punctuation
-        0xFF00 <= code <= 0xFFEF          # Halfwidth/Fullwidth forms
+        0x4E00 <= code <= 0x9FFF or       # 中日韩统一表意
+        0x3400 <= code <= 0x4DBF or       # 扩展A
+        0x2000 <= code <= 0x206F or       # 标点
+        0x3000 <= code <= 0x303F or       # CJK 符号
+        0xFF00 <= code <= 0xFFEF          # 全/半角
     )
 
 def wrap_mixed(text: str, size: float, max_w: float):
-    # Greedy wrapper that handles CJK (no spaces) and Latin (space separated).
-    # Returns list of lines. Preserves existing newlines.
+    """按字符贪心换行，兼容 CJK（无空格）与拉丁（有空格）。"""
     if not text:
         return []
-    lines = []
-    cur = ""
-    cur_w = 0.0
+    lines, cur, cur_w = [], "", 0.0
     for ch in text:
         if ch == "\n":
             lines.append(cur)
@@ -122,7 +121,7 @@ def wrap_mixed(text: str, size: float, max_w: float):
     return lines
 
 def draw_text_mixed(c, x: float, y: float, text: str, size: float):
-    # Draw a single line with mixed fonts by character, left to right.
+    """同一行内按字符切换字体绘制（拉丁/中文各用对应字体）。"""
     cx = x
     for ch in text:
         font = FONT_CJK if _is_cjk(ch) else FONT_LATIN
@@ -130,34 +129,40 @@ def draw_text_mixed(c, x: float, y: float, text: str, size: float):
         c.drawString(cx, y, ch)
         cx += pdfmetrics.stringWidth(ch, font, size)
 
-def _leading(sz):
+def _leading(sz):  # 行距
     return int(sz * 1.35)
 
-# ---------- Layout ----------
+# ---------- 页眉（3行）----------
 def _draw_header(c, w, h, meta):
     left = 15*mm
     top = h - 20*mm
 
+    # 标题
     c.setFont(FONT_LATIN_BOLD, 16)
     c.drawString(left, top, TITLE)
-    y = top - 10*mm
+    y = top - 9*mm
 
-    # meta line(s): pure Latin most of the time
-    c.setFont(FONT_LATIN, 10)
-    order_id = meta.get("order_id","")
-    client   = meta.get("customer_name","")
-    tel      = meta.get("phone","")
-    email    = meta.get("email","")
-    created  = meta.get("created_at","")
-    c.drawString(left, y, f"Order ID: {order_id}    Client: {client}    Tél: {tel}    Email: {email}")
-    y -= 5*mm
-    if created:
-        c.drawString(left, y, f"Créé le: {created}")
-        y -= 5*mm
+    # 三行客户信息
+    order_id = (meta or {}).get("order_id","")
+    client   = (meta or {}).get("customer_name","")
+    tel      = (meta or {}).get("phone","")
+    email    = (meta or {}).get("email","")
+    created  = (meta or {}).get("created_at","")
 
+    line1 = f"Order ID: {order_id}    Client: {client}"
+    line2 = f"Tél: {tel}    Email: {email}"
+    line3 = f"Créé le: {created}" if created else ""
+
+    draw_text_mixed(c, left, y, line1, 10); y -= 5*mm
+    draw_text_mixed(c, left, y, line2, 10); y -= 5*mm
+    if line3:
+        draw_text_mixed(c, left, y, line3, 10); y -= 5*mm
+
+    # 顶部分隔线
     c.line(15*mm, y, w - 15*mm, y)
     y -= 7*mm
 
+    # 列头
     MARG_L = 15*mm; MARG_R = 15*mm
     usable_w = w - MARG_L - MARG_R
     COL_PREVIEW = 32*mm
@@ -176,6 +181,7 @@ def _draw_header(c, w, h, meta):
     c.line(15*mm, y, w - 15*mm, y)
     return y, (MARG_L, usable_w, COL_PREVIEW, COL_PRODUCT, COL_QTY, COL_REMARK)
 
+# ---------- 正文 ----------
 def build_order_pdf_table(order_data: dict, out_path: str):
     _ensure_fonts()
 
@@ -187,7 +193,6 @@ def build_order_pdf_table(order_data: dict, out_path: str):
 
     items = (order_data or {}).get("items", [])
     MIN_ROW_H = 28*mm
-    PREVIEW_MAX_H = 22*mm
     CELL_PAD = 3*mm
 
     PROD_SIZE = 11
@@ -206,74 +211,80 @@ def build_order_pdf_table(order_data: dict, out_path: str):
         q_c  = int(it.get("qty_cases") or 0)
         remark = (it.get("remark") or "").strip()
 
+        # 数量列（已去掉 Total）
         qty_lines = []
         if q_c:
             qty_lines.append(f"{q_c} {'caisse' if q_c == 1 else 'caisses'}")
         if q_u:
             qty_lines.append(f"{q_u} {'unité' if q_u == 1 else 'unités'}")
 
-        # wrapping
+        # 文字换行
         prod_lines   = wrap_mixed(name,   PROD_SIZE, COL_PRODUCT - 2*CELL_PAD)
         remark_lines = wrap_mixed(remark, META_SIZE, COL_REMARK - 2*CELL_PAD)
+
+        # 行高：取文本所需高度与 MIN_ROW_H 的较大值（图片高度用整行高度显示）
         text_h = max(
             len(prod_lines)   * PROD_LEAD + 2*CELL_PAD,
             len(qty_lines)    * META_LEAD + 2*CELL_PAD,
             len(remark_lines) * META_LEAD + 2*CELL_PAD,
-            PREVIEW_MAX_H + 2*CELL_PAD
+            0
         )
         row_h = max(MIN_ROW_H, text_h)
 
+        # 分页
         if y - row_h < 20*mm:
             new_page()
 
+        # 列坐标
         x0 = MARG_L
         x1 = x0 + COL_PREVIEW
         x2 = x1 + COL_PRODUCT
         x3 = x2 + COL_QTY
         x4 = x3 + COL_REMARK
 
+        # 行框线
         c.line(MARG_L, y, x4, y)
         c.line(MARG_L, y - row_h, x4, y - row_h)
         for xx in (x1, x2, x3, x4):
             c.line(xx, y, xx, y - row_h)
 
-        # image
+        # -------- 预览图片：使用“整行高度 - 内边距”的可用高度，按比例放大并居中（不裁剪）--------
         img_path = it.get("image_path")
+        box_w = COL_PREVIEW - 2*CELL_PAD
+        box_h = row_h - 2*CELL_PAD  # 关键：用整行高度，让图片尽可能大
+
         if img_path:
             try:
                 img = ImageReader(img_path)
                 iw, ih = img.getSize()
-                box_w = COL_PREVIEW - 2*CELL_PAD
-                box_h = PREVIEW_MAX_H
-                scale = min(box_w/iw, box_h/ih)
+                scale  = min(box_w / iw, box_h / ih)  # contain
                 draw_w = iw * scale
                 draw_h = ih * scale
-                img_x = x0 + CELL_PAD + (box_w - draw_w)/2
-                img_y = y - CELL_PAD - draw_h - (row_h - 2*CELL_PAD - box_h)/2
-                c.drawImage(img, img_x, img_y, draw_w, draw_h, preserveAspectRatio=True, mask='auto')
+                img_x = x0 + CELL_PAD + (box_w - draw_w) / 2
+                img_y = y - CELL_PAD - draw_h - (box_h - draw_h) / 2
+                c.drawImage(img, img_x, img_y, draw_w, draw_h,
+                            preserveAspectRatio=True, mask='auto')
             except Exception:
                 c.setLineWidth(0.5)
-                c.rect(x0 + CELL_PAD, y - CELL_PAD - PREVIEW_MAX_H,
-                       COL_PREVIEW - 2*CELL_PAD, PREVIEW_MAX_H)
+                c.rect(x0 + CELL_PAD, y - CELL_PAD - box_h, box_w, box_h)
         else:
             c.setLineWidth(0.5)
-            c.rect(x0 + CELL_PAD, y - CELL_PAD - PREVIEW_MAX_H,
-                   COL_PREVIEW - 2*CELL_PAD, PREVIEW_MAX_H)
+            c.rect(x0 + CELL_PAD, y - CELL_PAD - box_h, box_w, box_h)
 
-        # product name (mixed)
+        # 产品名（混排）
         ty = y - CELL_PAD - PROD_SIZE
         for line in prod_lines:
             draw_text_mixed(c, x1 + CELL_PAD, ty, line, PROD_SIZE)
             ty -= PROD_LEAD
 
-        # qty (Latin)
+        # 数量（拉丁）
         c.setFont(FONT_LATIN, META_SIZE)
         ty = y - CELL_PAD - META_SIZE
         for line in qty_lines:
             c.drawString(x2 + CELL_PAD, ty, line)
             ty -= META_LEAD
 
-        # remark (mixed)
+        # 备注（混排）
         ty = y - CELL_PAD - META_SIZE
         for line in remark_lines:
             draw_text_mixed(c, x3 + CELL_PAD, ty, line, META_SIZE)
@@ -283,5 +294,5 @@ def build_order_pdf_table(order_data: dict, out_path: str):
 
     c.save()
 
-# Backward compatibility
+# 兼容旧入口名
 build_order_pdf = build_order_pdf_table
