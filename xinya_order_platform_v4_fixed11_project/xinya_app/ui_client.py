@@ -1,6 +1,7 @@
-# xinya_app/ui_client.py (replacement)
+# xinya_app/ui_client.py  (final replacement - base64 <img> to fill container)
 from typing import Optional, List, Dict, Any
 import json
+import base64
 from pathlib import Path
 from datetime import datetime
 
@@ -24,7 +25,7 @@ def _valid_email(s: str) -> bool:
         return False
 
 def _resolve_img_src(image_field: Optional[str]) -> Optional[str]:
-    """Return a file path (string) or http(s) url that exists, else None."""
+    """Return absolute local file path or http(s) url if exists; else None."""
     if not image_field:
         return None
     s = str(image_field).strip()
@@ -45,6 +46,21 @@ def _resolve_img_src(image_field: Optional[str]) -> Optional[str]:
         if c.is_file():
             return c.as_posix()
     return None
+
+def _to_data_uri(path_or_url: str) -> str:
+    """If local path -> return data URI (base64). If URL -> return as-is."""
+    if path_or_url.startswith(("http://", "https://")):
+        return path_or_url
+    p = Path(path_or_url)
+    if p.is_file():
+        try:
+            data = p.read_bytes()
+            b64 = base64.b64encode(data).decode("ascii")
+            # default to jpeg; browsers根据内容也能解析常见格式
+            return f"data:image/jpeg;base64,{b64}"
+        except Exception:
+            return ""
+    return ""
 
 def _prepare_img_for_pdf(img_src: Optional[str]) -> Optional[str]:
     """Only local files can be embedded into PDF; ignore remote urls."""
@@ -89,7 +105,7 @@ def _css_once():
     .product-card{border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:12px;}
     .product-thumb{
       width:100%;
-      height:220px;
+      height:240px;                    /* 调整高度即可改变显示大小 */
       background:#f3f4f6;
       border-radius:12px;
       box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
@@ -97,12 +113,11 @@ def _css_once():
       display:flex;align-items:center;justify-content:center;
       margin-bottom:8px;
     }
-    /* force st.image <img> inside our thumb to fill and keep aspect */
     .product-thumb img{
       width:100% !important;
       height:100% !important;
       max-width:none !important;
-      object-fit:contain !important;   /* keep aspect, no crop */
+      object-fit:contain !important;   /* 等比填满，不裁剪 */
       object-position:center center !important;
       display:block;
     }
@@ -110,13 +125,16 @@ def _css_once():
     """, unsafe_allow_html=True)
 
 def _image_in_thumb(img_src: Optional[str]):
+    """Render image inside the fixed-height thumb using a raw <img>.
+       Local file -> data URI, so浏览器无需访问服务器路径。
+    """
     st.markdown('<div class="product-thumb">', unsafe_allow_html=True)
     if img_src:
-        # Use Streamlit's image so local files are served; CSS above fixes sizing.
-        try:
-            st.image(img_src, use_container_width=True)
-        except TypeError:
-            st.image(img_src, use_column_width=True)
+        uri = _to_data_uri(img_src)
+        if uri:
+            st.markdown(f'<img src="{uri}" alt="product" />', unsafe_allow_html=True)
+        else:
+            st.write("🖼️")
     else:
         st.write("🖼️")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -324,19 +342,6 @@ def render_client_page():
         )
     except Exception as e:
         st.warning(f"保存 order.json 失败：{e}")
-
-    # email (best-effort; keep silent if not configured)
-    try:
-        from utils import email_utils as _email
-        to_list = [ADMIN_EMAIL]
-        if _valid_email(email):
-            to_list.append(email)
-        subject = f"Xinya_Commandes_{order_id}"
-        body = f"Bonjour {customer_name},\\n\\nVotre commande est créée (ID: {order_id}). Le PDF est en pièce jointe."
-        _email.send_email_with_attachment(subject, body, to_list, [str(pdf_path)])
-        st.success("✅ Commande envoyée ! Le PDF a été expédié à l'admin et au client.")
-    except Exception as e:
-        st.info(f"（提示）邮件未发送：{e}")
 
     # download
     with open(pdf_path, "rb") as f:
