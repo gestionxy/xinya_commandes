@@ -84,6 +84,18 @@ def _prepare_img_for_pdf(img_src: Optional[str]) -> Optional[str]:
 def render_client_page():
     st.title("🛒 Xinya Supermarché | Plateforme de commande")
 
+    st.info(
+    "📌 下单须知：\n"
+    "1️⃣ 下单前请确认您已在左侧栏正确输入姓名、电话和邮箱。\n"
+    "2️⃣ 商品可选择数量，单位为：个（unité）或箱（caisse）。\n"
+    "3️⃣ 系统正在完善中，如自选商品中没有您需要的，请在下方上传商品图片，并填写名称、数量及备注。我们的工作人员会及时与您联系。\n\n"
+    "📌 Consignes de commande :\n"
+    "1️⃣ Avant de passer commande, veuillez vérifier que vous avez bien saisi votre nom, téléphone et courriel dans la barre de gauche.\n"
+    "2️⃣ Vous pouvez choisir la quantité, avec les unités suivantes : unité ou caisse.\n"
+    "3️⃣ Comme notre système est en cours d’amélioration, si le produit souhaité n’apparaît pas dans les options, veuillez télécharger son image ci-dessous, ajouter le nom, la quantité et vos remarques. Notre équipe vous contactera rapidement."
+    )
+
+
     # Sidebar
     with st.sidebar:
         st.header("Client")
@@ -184,7 +196,7 @@ def render_client_page():
         return
 
     if not customer_name or not phone or not _valid_email(email):
-        st.error("请填写：姓名、电话、有效邮箱。")
+        st.error("Veuillez remplir : nom, téléphone, adresse courriel valide. 请填写：姓名、电话、有效邮箱。")
         return
 
     order_id = gen_order_id(customer_name)
@@ -244,6 +256,7 @@ def render_client_page():
         })
 
     if not chosen:
+        st.warning("Veuillez sélectionner au moins un produit (ou ajouter un produit personnalisé) et indiquer la quantité.")
         st.warning("请选择至少一个商品（或添加自选商品）并填写数量。")
         return
 
@@ -261,7 +274,7 @@ def render_client_page():
     try:
         _pdf.build_order_pdf_table(order_data, str(pdf_path))
     except Exception as e:
-        st.error("PDF 生成失败：{}".format(e))
+        st.error("Échec de la génération du PDF / PDF 生成失败 : {}".format(e))
         return
 
     try:
@@ -269,7 +282,7 @@ def render_client_page():
             json.dumps(order_data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except Exception as e:
-        st.warning("保存 order.json 失败：{}".format(e))
+        st.warning("Échec de l'enregistrement de order.json / 保存 order.json 失败 : {}".format(e))
 
     subject = "Xinya_Commandes_{}".format(order_id)
     body = "Bonjour {},\n\nVotre commande est créée (ID: {}). Le PDF est en pièce jointe.".format(customer_name, order_id)
@@ -288,7 +301,8 @@ def render_client_page():
             legacy_send(subject, body, to_list, [str(pdf_path)])
         st.success("✅ Commande envoyée ! Le PDF a été expédié à l'admin et au client.")
     except Exception as e:
-        st.warning("⚠️ L'e-mail n'a不是被发送：{}\nPDF 已生成在本地。".format(e))
+        st.warning("⚠️ L'e-mail n'a pas été envoyé / 邮件未成功发送 : {}\nLe PDF a été généré localement / PDF 已生成在本地。".format(e))
+
 
     try:
         se = st.secrets
@@ -306,7 +320,7 @@ def render_client_page():
         meta_bytes = _json.dumps(order_data, ensure_ascii=False, indent=2).encode("utf-8")
         storage.upload_bytes("{}/order.json".format(remote_dir), meta_bytes,
                              commit_message="order {}: add metadata".format(order_id))
-        st.success("☁️ 已将订单备份到 GitHub。")
+        st.success("☁️ La commande a été sauvegardée avec succès sur GitHub.  已将订单备份到 GitHub。")
     except Exception as e:
         st.info("（可选）GitHub 备份未完成：{}".format(e))
 
@@ -326,7 +340,7 @@ def _render_custom_card(col, idx: int):
             with top[0]:
                 st.markdown("**Personnalisé #{}**".format(idx+1))
             with top[1]:
-                st.button("-", key="c_rm_{}".format(idx),
+                st.button("➖", key="c_rm_{}".format(idx),
                           on_click=_remove_custom_row, args=(idx,))
 
             st.text_input("Nom (facultatif) #{}".format(idx+1),
