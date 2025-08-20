@@ -122,7 +122,7 @@ def render_client_page():
             with st.container(border=True):
                 img_src = _resolve_img_src(p.get("image") or p.get("image_path") or p.get("img"))
                 if img_src:
-                    st.image(img_src, use_container_width=True)
+                    st.image(img_src, use_column_width=True)
                 else:
                     st.write("🖼️ (image introuvable)")
 
