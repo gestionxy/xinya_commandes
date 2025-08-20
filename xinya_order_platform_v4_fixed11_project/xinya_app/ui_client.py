@@ -6,7 +6,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from .config import ADMIN_EMAIL, EMAIL_RE, email_config_ok
+from .config import ADMIN_EMAIL, EMAIL_RE
 from .paths import BASE_DIR, ORDERS_DIR, ensure_dir
 from .repo_products import load_products
 from .ids import gen_order_id
@@ -87,23 +87,24 @@ def render_client_page():
     # —— 页面级 CSS：让商品图“按比例充满灰底框”，不裁剪 ——
     st.markdown("""
     <style>
-    .product-card { border: 1px solid rgba(0,0,0,0.06); border-radius: 12px; padding: 12px; }
-    .product-thumb {
-      width: 100%;
-      height: 190px;                 /* 想更大/更清晰可改成 210/220/240 */
-      background: #f3f4f6;
-      border-radius: 12px;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.05);
-      overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
-      margin-bottom: 8px;
+    .product-card{border:1px solid rgba(0,0,0,.06);border-radius:12px;padding:12px;}
+    .product-thumb{
+      width:100%;
+      height:220px;              
+      background:#f3f4f6;
+      border-radius:12px;
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
+      overflow:hidden;
+      display:flex;align-items:center;justify-content:center;
+      margin-bottom:8px;
     }
-    .product-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;           /* 关键：等比填充，不裁剪 */
-      object-position: center center;
-      display: block;
+    .product-thumb img.thumb-img{
+      width:100% !important;
+      height:100% !important;
+      max-width:none !important;
+      object-fit:contain !important;     /* 等比填充，不裁剪 */
+      object-position:center center !important;
+      display:block;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -143,26 +144,14 @@ def render_client_page():
             with st.container(border=True):
                 st.markdown('<div class="product-card">', unsafe_allow_html=True)
 
-                # —— 图片区域：灰底框 + 等比填充（contain） ——
+                # —— 图片区域：灰底框 + contain 显示 ——
                 img_src = _resolve_img_src(p.get("image") or p.get("image_path") or p.get("img"))
-                st.markdown('<div class="product-thumb">', unsafe_allow_html=True)
                 if img_src:
-                    # 让 <img> 占满父容器，最终由 CSS 控制高度与 object-fit
-                    # 原来是：
-                    # st.image(img_src, use_container_width=True)
-
-                    # 改成（向后兼容旧版 Streamlit）：
-                    try:
-                        st.image(img_src, use_container_width=True)
-                    except TypeError:
-                        # 旧版只支持 use_column_width
-                        st.image(img_src, use_column_width=True)
-
+                    st.markdown(f'<div class="product-thumb"><img src="{img_src}" alt="product" class="thumb-img"/></div>', unsafe_allow_html=True)
                 else:
-                    st.write("🖼️ (image introuvable)")
-                st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="product-thumb">🖼️</div>', unsafe_allow_html=True)
 
-                # 下面是原有的数量/备注等 UI（保持不变）
+                # 下面是数量/备注等 UI
                 upc = int(p.get("units_per_case", 0) or 0)
                 st.caption("Unité / caisse：{}".format(upc or "—"))
 
@@ -187,6 +176,13 @@ def render_client_page():
                              placeholder="Option : découpe / emballage / goût…")
 
                 st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- 下面自选商品、提交按钮、保存订单、生成 PDF 等逻辑保持不变 ----------
+    # （为了篇幅不重复粘贴，你直接用你现有的 ui_client.py 后半部分即可）
+
+
+
+
 
     # ---------- Custom products: 3-column grid ----------
     st.subheader("Produits personnalisés (image OU note + quantité)")
