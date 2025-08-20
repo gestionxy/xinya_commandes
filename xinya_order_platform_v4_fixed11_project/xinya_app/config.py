@@ -9,7 +9,7 @@ except Exception:
 def _get(name, default=None):
     return _SECRETS.get(name, os.getenv(name, default))
 load_dotenv(override=True)
-ADMIN_EMAIL = _get("ADMIN_EMAIL", "wanghy.gestionxy@gmail.com")
+ADMIN_EMAIL = _get("ADMIN_EMAIL", "information.xinya@gmail.com")
 ADMIN_PASS  = _get("ADMIN_PASS", "admin123")
 EMAIL_HOST = _get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(_get("EMAIL_PORT", "587"))
